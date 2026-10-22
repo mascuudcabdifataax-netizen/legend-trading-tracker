@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="so">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#10141d">
+  <meta name="description" content="LEGEND Trading Tracker — trade journal, cycles, accounts and payouts.">
+  <link rel="manifest" href="./manifest.json">
+  <link rel="stylesheet" href="./styles.css">
+  <title>LEGEND Trading Tracker</title>
+</head>
+<body>
+<header class="topbar">
+  <a class="brand" href="#" aria-label="LEGEND home"><span class="brandmark">L</span><span><b>LEGEND</b><small>TRADING TRACKER</small></span></a>
+  <div class="top-actions"><span id="connectionBadge" class="pill">Local mode</span><button id="settingsBtn" class="icon-btn" aria-label="Settings">⚙</button></div>
+</header>
+<main class="wrap">
+  <section class="hero">
+    <div><p class="eyebrow">EXECUTION OVER OUTCOME</p><h1>Trade with a plan.<br><span>Track like a legend.</span></h1><p class="muted">Nidaamkaaga. Xeerarkaaga. Diiwaankaaga.</p></div>
+    <div class="goal-card"><span class="muted">PAYOUT GOAL</span><strong id="goalAmount">$0 <small>/ $10,000</small></strong><div class="progress"><i id="goalProgress"></i></div><span id="goalPercent" class="muted">0% completed</span></div>
+  </section>
+  <nav class="tabs" aria-label="Main navigation">
+    <button class="tab active" data-tab="dashboard">Overview</button><button class="tab" data-tab="journal">Trade journal</button><button class="tab" data-tab="accounts">Accounts & payouts</button>
+  </nav>
+  <section id="dashboard" class="panel">
+    <div class="section-head"><div><p class="eyebrow">YOUR SYSTEM</p><h2>Trading overview</h2></div><button class="button primary" id="newTradeTop">＋ Log trade</button></div>
+    <div class="metrics">
+      <article class="metric"><span>Current account</span><strong id="metricAccount">$6,000</strong><small id="metricStage">Challenge · 1% risk</small></article>
+      <article class="metric"><span>Current cycle</span><strong id="metricCycle">0 / 8</strong><small>8-trade review unit</small></article>
+      <article class="metric"><span>Win rate</span><strong id="metricWinRate">—</strong><small id="metricTrades">0 trades logged</small></article>
+      <article class="metric"><span>Rules followed</span><strong id="metricRules">—</strong><small>Process discipline</small></article>
+    </div>
+    <div class="columns">
+      <article class="card"><div class="section-head"><div><h3>Current plan</h3><p class="muted">Xeerarka lagu saleeyo diiwaankaaga.</p></div></div>
+        <div class="rule"><span class="rule-icon">01</span><div><b>Risk per trade</b><p id="riskRule" class="muted">1% of account balance</p></div></div>
+        <div class="rule"><span class="rule-icon">02</span><div><b>Daily trade limit</b><p class="muted">Maximum 2 trades per day</p></div></div>
+        <div class="rule"><span class="rule-icon">03</span><div><b>Review every cycle</b><p class="muted">Complete 8 trades, then review execution.</p></div></div>
+      </article>
+      <article class="card"><div class="section-head"><div><h3>Latest trades</h3><button class="text-button" data-goto="journal">View journal →</button></div></div><div id="latestTrades" class="empty">Trade-gaaga koowaad halkan ayuu ka muuqan doonaa.</div></article>
+    </div>
+    <article id="cycleReview" class="card cycle-review hidden"></article>
+  </section>
+  <section id="journal" class="panel hidden">
+    <div class="section-head"><div><p class="eyebrow">PROCESS FIRST</p><h2>Trade journal</h2><p class="muted">Trade kasta qor; marka 8 la gaaro, dib u eeg cycle-ka.</p></div><button id="newTrade" class="button primary">＋ Log trade</button></div>
+    <form id="tradeForm" class="card form-grid hidden">
+      <div class="form-title"><h3>Log a trade</h3><button type="button" id="closeForm" class="icon-btn">✕</button></div>
+      <label>Date<input type="date" id="tradeDate" required></label>
+      <label>Account stage<select id="tradeStage"><option value="challenge">Challenge</option><option value="funded">Funded</option></select></label>
+      <label>Account size<select id="tradeAccount"><option value="6000">$6,000</option><option value="15000">$15,000</option><option value="50000">$50,000</option><option value="100000">$100,000</option></select></label>
+      <label>Pair / instrument<input id="pair" placeholder="e.g. XAUUSD" value="XAUUSD" required></label>
+      <label>Setup<input id="setup" placeholder="e.g. 1H breakout"></label>
+      <label>Outcome<select id="outcome"><option value="TP">TP — Win</option><option value="SL">SL — Loss</option><option value="BE">BE — Break-even</option></select></label>
+      <label>System rules followed?<select id="rules"><option value="yes">Yes</option><option value="no">No</option></select></label>
+      <label>Psychology (1–10)<input type="number" id="psychology" min="1" max="10" value="7" required></label>
+      <label class="wide">Lesson / notes<textarea id="lesson" rows="2" placeholder="Maxaan bartay trade-kan?"></textarea></label>
+      <div class="risk-preview wide" id="riskPreview">Risk guide: $60 per trade (1%).</div>
+      <div class="form-actions wide"><button class="button primary" type="submit">Save trade</button><button class="button ghost" type="button" id="cancelForm">Cancel</button></div>
+      <p class="muted tiny wide">Tracker-ku wuxuu tirinayaa trades-ka aad geliso. Ma aha mid broker-ka si toos ah ula socda.</p>
+    </form>
+    <div class="table-wrap card"><table><thead><tr><th>#</th><th>Date</th><th>Cycle</th><th>Account</th><th>Instrument</th><th>Outcome</th><th>Rules</th><th>Psych.</th><th>Risk guide</th><th></th></tr></thead><tbody id="tradeRows"></tbody></table><div id="journalEmpty" class="empty">Weli trade lama diiwaangelin.</div></div>
+  </section>
+  <section id="accounts" class="panel hidden">
+    <div class="section-head"><div><p class="eyebrow">LONG-TERM ROADMAP</p><h2>Accounts & payouts</h2><p class="muted">Raac horumarka challenges-ka iyo payout-kaaga.</p></div></div>
+    <div class="account-grid">
+      <article class="account-card selected"><span class="status">STEP 1</span><h3>$6,000</h3><p>First challenge</p><label>Stage<select id="stage6000" data-account-stage="6000"><option value="challenge">Challenge</option><option value="funded">Funded</option><option value="passed">Passed</option></select></label></article>
+      <article class="account-card"><span class="status">STEP 2</span><h3>$15,000</h3><p>Next challenge</p><label>Stage<select id="stage15000" data-account-stage="15000"><option value="planned">Planned</option><option value="challenge">Challenge</option><option value="funded">Funded</option><option value="passed">Passed</option></select></label></article>
+      <article class="account-card"><span class="status">STEP 3</span><h3>$50,000</h3><p>Scale carefully</p><label>Stage<select id="stage50000" data-account-stage="50000"><option value="planned">Planned</option><option value="challenge">Challenge</option><option value="funded">Funded</option><option value="passed">Passed</option></select></label></article>
+      <article class="account-card"><span class="status">STEP 4</span><h3>$100,000</h3><p>Long-term target</p><label>Stage<select id="stage100000" data-account-stage="100000"><option value="planned">Planned</option><option value="challenge">Challenge</option><option value="funded">Funded</option><option value="passed">Passed</option></select></label></article>
+    </div>
+    <div class="columns payout-columns">
+      <article class="card"><h3>Payout log</h3><p class="muted">Ku dar payout aad dhab ahaan heshay.</p><form id="payoutForm" class="payout-form"><label>Date<input type="date" id="payoutDate" required></label><label>Amount (USD)<input type="number" id="payoutAmount" min="0.01" step="0.01" placeholder="500" required></label><label>Account<select id="payoutAccount"><option value="6000">$6,000</option><option value="15000">$15,000</option><option value="50000">$50,000</option><option value="100000">$100,000</option></select></label><button class="button primary" type="submit">＋ Add payout</button></form><div id="payoutRows" class="payout-list empty">Weli payout lama gelin.</div></article>
+      <article class="card"><h3>Roadmap</h3><div class="rule"><span class="rule-icon">01</span><div><b>Build consistency</b><p class="muted">8-trade cycles iyo journal joogto ah.</p></div></div><div class="rule"><span class="rule-icon">02</span><div><b>Scale accounts</b><p class="muted">U gudub account-ka xiga marka aad go'aansato.</p></div></div><div class="rule"><span class="rule-icon">03</span><div><b>$10,000 payout goal</b><p class="muted">Payout-yada la diiwaangeliyey oo keliya ayaa lagu daraa.</p></div></div></article>
+    </div>
+  </section>
+</main>
+<footer class="footer">LEGEND Trading Tracker <span>·</span> Your data, your discipline.</footer>
+<div id="toast" class="toast" role="status"></div>
+<dialog id="settingsDialog">
+  <form method="dialog" class="dialog-head"><div><p class="eyebrow">SYNC & ACCOUNT</p><h2>Cloud settings</h2></div><button class="icon-btn" aria-label="Close">✕</button></form>
+  <div class="dialog-body">
+    <div class="notice"><b>Local preview is active.</b><p>Cloud sync wuxuu u baahan yahay Supabase project iyo URL/API key kuu gaar ah. Ha gelin service-role key.</p></div>
+    <label>Supabase project URL<input id="supabaseUrl" type="url" placeholder="https://your-project.supabase.co"></label>
+    <label>Supabase anon / publishable key<input id="supabaseKey" type="password" placeholder="Public anon/publishable key"></label>
+    <button id="saveCloudConfig" class="button primary full" type="button">Save cloud configuration</button>
+    <hr>
+    <label>Email<input id="authEmail" type="email" autocomplete="email" placeholder="you@example.com"></label>
+    <label>Password<input id="authPassword" type="password" autocomplete="current-password" placeholder="At least 8 characters"></label>
+    <div class="form-actions"><button id="signUpBtn" type="button" class="button ghost">Create account</button><button id="signInBtn" type="button" class="button primary">Sign in</button></div>
+    <button id="signOutBtn" type="button" class="button danger full">Sign out</button>
+    <p class="tiny muted">Ka hor cloud sync, socodsii supabase-setup.sql ee SQL Editor-ka Supabase. Ka dhig RLS policies sidii file-ka ku qoran.</p>
+  </div>
+</dialog>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="./app.js"></script>
+</body>
+</html>

@@ -13,7 +13,25 @@ function money(n){return new Intl.NumberFormat("en-US",{style:"currency",currenc
 function dateNow(){const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`}
 function escapeHtml(s){return String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
 function toast(msg){const el=$("toast");el.textContent=msg;el.classList.add("show");clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.classList.remove("show"),2800)}
-function riskRate(stage){return stage==="funded"?.005:.01}
+function tradeR(trade){
+  if(trade.outcome==="TP") return 3;
+  if(trade.outcome==="SL") return -1;
+  if(trade.outcome==="BE") return 0;
+  return Number(trade.rMultiple ?? 0);
+}
+
+function getBalance(account,stage){
+  return sortedTrades()
+    .filter(t=>Number(t.account)===Number(account)&&t.stage===stage)
+    .reduce((balance,t)=>{
+      const risk=Number(t.riskAmount)||Number(t.account)*riskRate(stage);
+      return balance+(t.profitLoss!=null
+        ? Number(t.profitLoss)
+        : risk*tradeR(t));
+    },Number(account));
+}
+
+  
 function cycleNum(index){return Math.floor(index/8)+1}
 function outcomeLabel(o){return o==="TP"?"TP":o==="SL"?"SL":"BE"}
 function sortedTrades(){return [...data.trades].sort((a,b)=>a.date.localeCompare(b.date)||a.createdAt-b.createdAt)}

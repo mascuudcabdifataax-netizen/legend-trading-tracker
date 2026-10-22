@@ -48,7 +48,19 @@
       <label>Account size<select id="tradeAccount"><option value="6000">$6,000</option><option value="15000">$15,000</option><option value="50000">$50,000</option><option value="100000">$100,000</option></select></label>
       <label>Pair / instrument<input id="pair" placeholder="e.g. XAUUSD" value="XAUUSD" required></label>
       <label>Setup<input id="setup" placeholder="e.g. 1H breakout"></label>
-      <label>Outcome<select id="outcome"><option value="TP">TP — Win</option><option value="SL">SL — Loss</option><option value="BE">BE — Break-even</option></select></label>
+      
+<label>Outcome
+  <select id="outcome">
+    <option value="TP">TP — Win (+3R)</option>
+    <option value="SL">SL — Loss (-1R)</option>
+    <option value="BE">BE — Break-even (0R)</option>
+    <option value="MANUAL">Manual Exit</option>
+  </select>
+</label>
+<label>Manual R Multiple
+  <input id="manualR" type="number" step="0.1" value="0" placeholder="Tusaale: 1.5 ama -0.5" />
+</label>
+
       <label>System rules followed?<select id="rules"><option value="yes">Yes</option><option value="no">No</option></select></label>
       <label>Psychology (1–10)<input type="number" id="psychology" min="1" max="10" value="7" required></label>
       <label class="wide">Lesson / notes<textarea id="lesson" rows="2" placeholder="Maxaan bartay trade-kan?"></textarea></label>

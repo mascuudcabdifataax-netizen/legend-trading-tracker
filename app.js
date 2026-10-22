@@ -34,8 +34,14 @@ function getBalance(account,stage){
   
 function cycleNum(index){return Math.floor(index/8)+1}
 function outcomeLabel(o){return o==="TP"?"TP":o==="SL"?"SL":"BE"}
-function sortedTrades(){return [...data.trades].sort((a,b)=>a.date.localeCompare(b.date)||a.createdAt-b.createdAt)}
-function updateRiskPreview(){const amount=Number($("tradeAccount").value)*riskRate($("tradeStage").value);$("riskPreview").textContent=`Risk guide: ${money(amount)} per trade (${(riskRate($("tradeStage").value)*100).toFixed(1)}% of selected account). Daily limit: 2 trades.`}
+function sortedTrades(){return [...data.trades].sort((a,b)=>a.date.localeCompare(b.date)||a.createdAt-b.createdAt)}function updateRiskPreview(){
+  const account=Number($("tradeAccount").value);
+  const stage=$("tradeStage").value;
+  const balance=getBalance(account,stage);
+  const amount=balance*riskRate(stage);
+  $("riskPreview").textContent=
+    `Balance: ${money(balance)} | Risk: ${money(amount)} (${(riskRate(stage)*100).toFixed(1)}%). Daily limit: 2 trades.`;
+}
 function setActiveTab(tab){document.querySelectorAll(".tab").forEach(b=>b.classList.toggle("active",b.dataset.tab===tab));["dashboard","journal","accounts"].forEach(id=>$(id).classList.toggle("hidden",id!==tab));if(tab==="journal")renderJournal();if(tab==="accounts")renderPayouts()}
 function render(){
 const trades=sortedTrades(), wins=trades.filter(t=>t.outcome==="TP").length, counted=trades.filter(t=>t.outcome!=="BE").length, ruleYes=trades.filter(t=>t.rules==="yes").length, payout=data.payouts.reduce((s,p)=>s+Number(p.amount),0), account=Number(data.settings.activeAccount||6000),stage=data.settings.activeStage||"challenge";

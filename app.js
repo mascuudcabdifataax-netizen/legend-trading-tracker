@@ -1,3 +1,5 @@
+
+
 (() => {
 const $ = id => document.getElementById(id);
 const STORAGE_KEY = "legend-tracker-data-v1";
@@ -72,7 +74,95 @@ async function main(){
 document.querySelectorAll(".tab").forEach(b=>b.addEventListener("click",()=>setActiveTab(b.dataset.tab)));document.querySelectorAll("[data-goto]").forEach(b=>b.addEventListener("click",()=>setActiveTab(b.dataset.goto)));
 $("newTrade").addEventListener("click",openTradeForm);$("newTradeTop").addEventListener("click",openTradeForm);$("closeForm").addEventListener("click",closeTradeForm);$("cancelForm").addEventListener("click",closeTradeForm);
 $("tradeStage").addEventListener("change",updateRiskPreview);$("tradeAccount").addEventListener("change",updateRiskPreview);
-$("tradeForm").addEventListener("submit",async e=>{e.preventDefault();const date=$("tradeDate").value,stage=$("tradeStage").value,account=Number($("tradeAccount").value);const dayCount=data.trades.filter(t=>t.date===date).length;if(dayCount>=2){toast("Daily limit reached: ugu badnaan 2 trades maalintii.");return}const trades=sortedTrades(),rate=riskRate(stage),t={id:uuid(),date,stage,account,pair:$("pair").value.trim().toUpperCase(),setup:$("setup").value.trim(),outcome:$("outcome").value,rules:$("rules").value,psychology:Number($("psychology").value),lesson:$("lesson").value.trim(),riskAmount:account*rate,riskPercent:(rate*100).toFixed(1),cycle:cycleNum(trades.length),createdAt:Date.now()};if(!t.pair){toast("Instrument-ka geli.");return}data.trades.push(t);data.settings.activeAccount=account;data.settings.activeStage=stage;saveLocal();render();closeTradeForm();e.target.reset();$("pair").value="XAUUSD";$("psychology").value="7";try{await cloudUpsert("legend_trades",[makeSupabaseRecord(t)]);toast("Trade saved"+(syncMode&&currentUser?" & synced.":" locally."))}catch(err){toast("Saved locally; cloud sync failed: "+err.message)}});
+
+$("tradeForm").addEventListener("submit",async e=>{
+e.preventDefault();
+
+const date=$("tradeDate").value;
+const stage=$("tradeStage").value;
+const account=Number($("tradeAccount").value);
+const outcome=$("outcome").value;
+
+const dayCount=data.trades.filter(t=>
+t.date===date &&
+Number(t.account)===account &&
+t.stage===stage
+).length;
+
+if(dayCount>=2){
+toast("Daily limit reached: ugu badnaan 2 trades maalintii.");
+return;
+}
+
+const balance=getBalance(account,stage);
+const rate=riskRate(stage);
+const riskAmount=balance*rate;
+
+let rMultiple=0;
+
+if(outcome==="TP") rMultiple=3;
+else if(outcome==="SL") rMultiple=-1;
+else if(outcome==="BE") rMultiple=0;
+else {
+const manual=$("manualR").value;
+if(manual.trim()===""){
+toast("Geli R multiple-ka.");
+return;
+}
+rMultiple=Number(manual);
+if(!Number.isFinite(rMultiple)){
+toast("R multiple sax ah geli.");
+return;
+}
+}
+
+const trades=sortedTrades();
+const t={
+id:uuid(),
+date,
+stage,
+account,
+pair:$("pair").value.trim().toUpperCase(),
+setup:$("setup").value.trim(),
+outcome,
+rMultiple,
+profitLoss:riskAmount*rMultiple,
+rules:$("rules").value,
+psychology:Number($("psychology").value),
+lesson:$("lesson").value.trim(),
+riskAmount,
+riskPercent:(rate*100).toFixed(1),
+cycle:cycleNum(trades.filter(x=>
+Number(x.account)===account && x.stage===stage
+).length),
+createdAt:Date.now()
+};
+
+if(!t.pair){
+toast("Instrument-ka geli.");
+return;
+}
+
+data.trades.push(t);
+data.settings.activeAccount=account;
+data.settings.activeStage=stage;
+saveLocal();
+render();
+closeTradeForm();
+e.target.reset();
+$("pair").value="GBPUSD";
+$("psychology").value="7";
+if($("manualR")) $("manualR").value="0";
+updateRiskPreview();
+
+try{
+await cloudUpsert("legend_trades",[makeSupabaseRecord(t)]);
+toast("Trade saved"+(syncMode&&currentUser?" & synced.":" locally."));
+}catch(err){
+toast("Saved locally; cloud sync failed: "+err.message);
+}
+});
+,stage=$("tradeStage").value,account=Number($("tradeAccount").value);const dayCount=data.trades.filter(t=>t.date===date).length;if(dayCount>=2){toast("Daily limit reached: ugu badnaan 2 trades maalintii.");return}const trades=sortedTrades(),rate=riskRate(stage),t={id:uuid(),date,stage,account,pair:$("pair").value.trim().toUpperCase(),setup:$("setup").value.trim(),outcome:$("outcome").value,rules:$("rules").value,psychology:Number($("psychology").value),lesson:$("lesson").value.trim(),riskAmount:account*rate,riskPercent:(rate*100).toFixed(1),cycle:cycleNum(trades.length),createdAt:Date.now()};if(!t.pair){toast("Instrument-ka geli.");return}data.trades.push(t);data.settings.activeAccount=account;data.settings.activeStage=stage;saveLocal();render();closeTradeForm();e.target.reset();$("pair").value="XAUUSD";$("psychology").value="7";try{await cloudUpsert("legend_trades",[makeSupabaseRecord(t)]);toast("Trade saved"+(syncMode&&currentUser?" & synced.":" locally."))}catch(err){toast("Saved locally; cloud sync failed: "+err.message)}});
 document.body.addEventListener("click",async e=>{const td=e.target.closest("[data-delete-trade]");if(td&&confirm("Ma tirtiraysaa trade-kan?")){const id=td.dataset.deleteTrade;data.trades=data.trades.filter(t=>t.id!==id);saveLocal();render();try{await cloudDelete("legend_trades",id)}catch(err){toast("Deleted locally; cloud sync failed.")}return}const pd=e.target.closest("[data-delete-payout]");if(pd&&confirm("Ma tirtiraysaa payout-kan?")){const id=pd.dataset.deletePayout;data.payouts=data.payouts.filter(p=>p.id!==id);saveLocal();render();try{await cloudDelete("legend_payouts",id)}catch(err){toast("Deleted locally; cloud sync failed.")}}});
 document.querySelectorAll("[data-account-stage]").forEach(s=>s.addEventListener("change",async()=>{const size=Number(s.dataset.accountStage);data.stages[String(size)]=s.value;saveLocal();if(size===6000){data.settings.activeAccount=6000;data.settings.activeStage=s.value==="planned"?"challenge":s.value}render();try{await cloudUpsert("legend_account_stages",[{id:`stage-${size}`,account_size:size,stage:s.value}])}catch(err){toast("Stage saved locally; cloud sync failed.")}}));
 $("payoutDate").value=dateNow();$("payoutForm").addEventListener("submit",async e=>{e.preventDefault();const p={id:uuid(),date:$("payoutDate").value,amount:Number($("payoutAmount").value),account:Number($("payoutAccount").value)};if(!(p.amount>0)){toast("Amount sax ah geli.");return}data.payouts.push(p);saveLocal();render();$("payoutAmount").value="";try{await cloudUpsert("legend_payouts",[{id:p.id,date:p.date,amount:p.amount,account_size:p.account}]);toast("Payout saved"+(syncMode&&currentUser?" & synced.":" locally."))}catch(err){toast("Payout saved locally; cloud sync failed.")}});

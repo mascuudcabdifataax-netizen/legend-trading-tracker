@@ -1,173 +1,27 @@
-
-
 (() => {
-const $ = id => document.getElementById(id);
-const STORAGE_KEY = "legend-tracker-data-v1";
-const CONFIG_KEY = "legend-tracker-supabase-config-v1";
-const ACCOUNT_SIZES = [6000,15000,50000,100000];
-let data = loadLocal();
-let supabase = null, currentUser = null, syncMode = false, cloudReady = false, toastTimer;
-function defaultData(){return {trades:[],payouts:[],stages:{"6000":"challenge","15000":"planned","50000":"planned","100000":"planned"},settings:{activeAccount:6000,activeStage:"challenge"}}}
-function loadLocal(){try{return {...defaultData(),...JSON.parse(localStorage.getItem(STORAGE_KEY)||"{}")}}catch{return defaultData()}}
-function saveLocal(){localStorage.setItem(STORAGE_KEY,JSON.stringify(data))}
-function uuid(){return crypto.randomUUID?crypto.randomUUID():`${Date.now()}-${Math.random().toString(16).slice(2)}`}
-function money(n){return new Intl.NumberFormat("en-US",{style:"currency",currency:"USD",maximumFractionDigits:2}).format(Number(n)||0)}
-function dateNow(){const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`}
-function escapeHtml(s){return String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
-function toast(msg){const el=$("toast");el.textContent=msg;el.classList.add("show");clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.classList.remove("show"),2800)}
-function tradeR(trade){
-  if(trade.outcome==="TP") return 3;
-  if(trade.outcome==="SL") return -1;
-  if(trade.outcome==="BE") return 0;
-  return Number(trade.rMultiple ?? 0);
-}
-
-function getBalance(account,stage){
-  return sortedTrades()
-    .filter(t=>Number(t.account)===Number(account)&&t.stage===stage)
-    .reduce((balance,t)=>{
-      const risk=Number(t.riskAmount)||Number(t.account)*riskRate(stage);
-      return balance+(t.profitLoss!=null
-        ? Number(t.profitLoss)
-        : risk*tradeR(t));
-    },Number(account));
-}
-
-  
-function cycleNum(index){return Math.floor(index/8)+1}
-function outcomeLabel(o){return o==="TP"?"TP":o==="SL"?"SL":"BE"}
-function sortedTrades(){return [...data.trades].sort((a,b)=>a.date.localeCompare(b.date)||a.createdAt-b.createdAt)}function updateRiskPreview(){
-  const account=Number($("tradeAccount").value);
-  const stage=$("tradeStage").value;
-  const balance=getBalance(account,stage);
-  const amount=balance*riskRate(stage);
-  $("riskPreview").textContent=
-    `Balance: ${money(balance)} | Risk: ${money(amount)} (${(riskRate(stage)*100).toFixed(1)}%). Daily limit: 2 trades.`;
-}
-function setActiveTab(tab){document.querySelectorAll(".tab").forEach(b=>b.classList.toggle("active",b.dataset.tab===tab));["dashboard","journal","accounts"].forEach(id=>$(id).classList.toggle("hidden",id!==tab));if(tab==="journal")renderJournal();if(tab==="accounts")renderPayouts()}
-function render(){
-const trades=sortedTrades(), wins=trades.filter(t=>t.outcome==="TP").length, counted=trades.filter(t=>t.outcome!=="BE").length, ruleYes=trades.filter(t=>t.rules==="yes").length, payout=data.payouts.reduce((s,p)=>s+Number(p.amount),0), account=Number(data.settings.activeAccount||6000),stage=data.settings.activeStage||"challenge";
-$("metricAccount").textContent=money(account);$("metricStage").textContent=`${stage[0].toUpperCase()+stage.slice(1)} · ${(riskRate(stage)*100).toFixed(1)}% risk`;
-$("riskRule").textContent=`${(riskRate(stage)*100).toFixed(1)}% = ${money(account*riskRate(stage))} guide per trade`;
-const cycleCount=trades.length%8;$("metricCycle").textContent=`${cycleCount===0&&trades.length>0?8:cycleCount} / 8`;$("metricCycleSub").textContent=trades.length?`${Math.floor((trades.length-1)/8)+1} cycle(s) in log`:"8-trade review unit";
-$("metricWinRate").textContent=counted?`${Math.round(wins/counted*100)}%`:"—";$("metricTrades").textContent=`${trades.length} trades logged`;$("metricRules").textContent=trades.length?`${Math.round(ruleYes/trades.length*100)}%`:"—";
-$("goalAmount").innerHTML=`${money(payout)} <small>/ $10,000</small>`;$("goalProgress").style.width=`${Math.min(100,payout/10000*100)}%`;$("goalPercent").textContent=`${Math.min(100,payout/10000*100).toFixed(1)}% completed`;
-const latest=trades.slice(-4).reverse();$("latestTrades").innerHTML=latest.length?latest.map(t=>`<div class="trade-mini"><div><b>${escapeHtml(t.pair)} · ${outcomeLabel(t.outcome)}</b><small>${escapeHtml(t.date)} · Cycle ${t.cycle}</small></div><span class="outcome ${t.outcome}">${t.outcome}</span></div>`).join(""):'<div class="empty">Trade-gaaga koowaad halkan ayuu ka muuqan doonaa.</div>';
-const complete=trades.length>=8&&trades.length%8===0, cycleTrades=trades.slice(Math.floor((trades.length-1)/8)*8);
-if(complete){const ct=trades.slice(-8),tp=ct.filter(t=>t.outcome==="TP").length,sl=ct.filter(t=>t.outcome==="SL").length,be=ct.filter(t=>t.outcome==="BE").length,followed=ct.filter(t=>t.rules==="yes").length;$("cycleReview").classList.remove("hidden");$("cycleReview").innerHTML=`<div class="section-head"><div><p class="eyebrow">CYCLE COMPLETE</p><h3>Cycle ${Math.ceil(trades.length/8)} — execution review</h3><p class="muted">Qiimee habka aad u raacday; 8 trades keliya ma caddaynayaan edge muddo dheer.</p></div><span class="outcome TP">8 / 8 TRADES</span></div><div class="cycle-stats"><div><small>TP / Wins</small><b>${tp}</b></div><div><small>SL / Losses</small><b>${sl}</b></div><div><small>Break-even</small><b>${be}</b></div><div><small>Rules followed</small><b>${followed}/8</b></div></div>`}else{$("cycleReview").classList.add("hidden")}
-renderJournal();renderPayouts();renderAccountStages();
-}
-function renderJournal(){const trades=sortedTrades();$("tradeRows").innerHTML=trades.slice().reverse().map((t,i)=>`<tr><td>${trades.length-i}</td><td>${escapeHtml(t.date)}</td><td>${t.cycle}</td><td>${money(t.account)}<br><small>${escapeHtml(t.stage)}</small></td><td>${escapeHtml(t.pair)}${t.setup?`<br><small>${escapeHtml(t.setup)}</small>`:""}</td><td><span class="outcome ${t.outcome}">${t.outcome}</span></td><td>${t.rules==="yes"?"✓ Yes":"✕ No"}</td><td>${t.psychology}/10</td><td>${money(t.riskAmount)} (${t.riskPercent}%)</td><td><button class="delete-btn" data-delete-trade="${t.id}" aria-label="Delete trade">×</button></td></tr>`).join("");$("journalEmpty").classList.toggle("hidden",trades.length>0)}
-function renderAccountStages(){document.querySelectorAll("[data-account-stage]").forEach(s=>s.value=data.stages[s.dataset.accountStage]||"planned")}
-function renderPayouts(){const payouts=[...data.payouts].sort((a,b)=>b.date.localeCompare(a.date));$("payoutRows").innerHTML=payouts.length?payouts.map(p=>`<div class="payout-row"><div><b>${money(p.amount)}</b><small>${escapeHtml(p.date)} · ${money(p.account)} account</small></div><button class="delete-btn" data-delete-payout="${p.id}" aria-label="Delete payout">×</button></div>`).join(""):'<div class="empty">Weli payout lama gelin.</div>'}
-function openTradeForm(){$("tradeDate").value=dateNow();$("tradeStage").value=data.settings.activeStage||"challenge";$("tradeAccount").value=String(data.settings.activeAccount||6000);$("tradeForm").classList.remove("hidden");updateRiskPreview();setActiveTab("journal");$("tradeForm").scrollIntoView({behavior:"smooth",block:"start"})}
-function closeTradeForm(){$("tradeForm").classList.add("hidden")}
-function setConnectionBadge(){const b=$("connectionBadge");b.textContent=syncMode&&currentUser?"Cloud synced":syncMode?"Cloud configured":"Local mode";b.classList.toggle("cloud",syncMode&&!!currentUser)}
-async function cloudUpsert(table,rows){if(!syncMode||!currentUser||!rows.length)return;const payload=rows.map(r=>({...r,user_id:currentUser.id}));const {error}=await supabase.from(table).upsert(payload,{onConflict:"id"});if(error)throw error}
-async function cloudDelete(table,id){if(!syncMode||!currentUser)return;const {error}=await supabase.from(table).delete().eq("id",id).eq("user_id",currentUser.id);if(error)throw error}
-async function syncAll(){if(!syncMode||!currentUser)return;try{const [tr,pay,acc]=await Promise.all([supabase.from("legend_trades").select("*").eq("user_id",currentUser.id),supabase.from("legend_payouts").select("*").eq("user_id",currentUser.id),supabase.from("legend_account_stages").select("*").eq("user_id",currentUser.id)]);if(tr.error)throw tr.error;if(pay.error)throw pay.error;if(acc.error)throw acc.error;data.trades=(tr.data||[]).map(r=>({id:r.id,date:r.date,stage:r.stage,account:Number(r.account_size),pair:r.pair,setup:r.setup||"",outcome:r.outcome,rules:r.rules_followed,psychology:r.psychology,lesson:r.lesson||"",riskAmount:Number(r.risk_amount),riskPercent:Number(r.risk_percent).toFixed(1),cycle:r.cycle,createdAt:Number(r.created_at_ms||Date.now())}));data.payouts=(pay.data||[]).map(r=>({id:r.id,date:r.date,amount:Number(r.amount),account:Number(r.account_size)}));(acc.data||[]).forEach(a=>data.stages[String(a.account_size)]=a.stage);saveLocal();render();toast("Cloud data loaded.");}catch(e){console.error(e);toast("Cloud sync error: "+(e.message||"check setup"));}}
-function makeSupabaseRecord(t){return {id:t.id,date:t.date,stage:t.stage,account_size:t.account,pair:t.pair,setup:t.setup,outcome:t.outcome,rules_followed:t.rules,psychology:t.psychology,lesson:t.lesson,risk_amount:t.riskAmount,risk_percent:t.riskPercent,cycle:t.cycle,created_at_ms:t.createdAt}}
-async function setupCloud(){const cfg=JSON.parse(localStorage.getItem(CONFIG_KEY)||"null");if(!cfg?.url||!cfg?.key||!window.supabase?.createClient){syncMode=false;setConnectionBadge();return}try{supabase=window.supabase.createClient(cfg.url,cfg.key,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});syncMode=true;const {data:sessionData}=await supabase.auth.getSession();currentUser=sessionData.session?.user||null;setConnectionBadge();if(currentUser)await syncAll();supabase.auth.onAuthStateChange((_event,session)=>{currentUser=session?.user||null;setConnectionBadge();if(currentUser)setTimeout(syncAll,0)});}catch(e){console.error(e);syncMode=false;setConnectionBadge()}}
-function saveConfig(){const url=$("supabaseUrl").value.trim().replace(/\/$/,""),key=$("supabaseKey").value.trim();if(!url||!key){toast("Geli Supabase URL iyo public anon key.");return}try{new URL(url)}catch{toast("Project URL sax ah geli.");return}localStorage.setItem(CONFIG_KEY,JSON.stringify({url,key}));toast("Configuration saved. Sign in to sync.");setupCloud()}
-async function auth(signUp){if(!supabase){toast("Marka hore geli oo kaydi Supabase config.");return}const email=$("authEmail").value.trim(),password=$("authPassword").value;if(!email||password.length<8){toast("Email geli; password-kuna ha ahaado ugu yaraan 8 xaraf.");return}const result=signUp?await supabase.auth.signUp({email,password}):await supabase.auth.signInWithPassword({email,password});if(result.error){toast(result.error.message);return}currentUser=result.data.user;setConnectionBadge();if(signUp&&!result.data.session){toast("Account la sameeyay. Hubi email-kaaga haddii verification la dalbado.");return}await syncAll();$("settingsDialog").close();toast(signUp?"Account created.":"Signed in. Cloud sync ready.")}
-async function main(){
-document.querySelectorAll(".tab").forEach(b=>b.addEventListener("click",()=>setActiveTab(b.dataset.tab)));document.querySelectorAll("[data-goto]").forEach(b=>b.addEventListener("click",()=>setActiveTab(b.dataset.goto)));
-$("newTrade").addEventListener("click",openTradeForm);$("newTradeTop").addEventListener("click",openTradeForm);$("closeForm").addEventListener("click",closeTradeForm);$("cancelForm").addEventListener("click",closeTradeForm);
-$("tradeStage").addEventListener("change",updateRiskPreview);$("tradeAccount").addEventListener("change",updateRiskPreview);
-
-$("tradeForm").addEventListener("submit",async e=>{
-e.preventDefault();
-
-const date=$("tradeDate").value;
-const stage=$("tradeStage").value;
-const account=Number($("tradeAccount").value);
-const outcome=$("outcome").value;
-
-const dayCount=data.trades.filter(t=>
-t.date===date &&
-Number(t.account)===account &&
-t.stage===stage
-).length;
-
-if(dayCount>=2){
-toast("Daily limit reached: ugu badnaan 2 trades maalintii.");
-return;
-}
-
-const balance=getBalance(account,stage);
-const rate=riskRate(stage);
-const riskAmount=balance*rate;
-
-let rMultiple=0;
-
-if(outcome==="TP") rMultiple=3;
-else if(outcome==="SL") rMultiple=-1;
-else if(outcome==="BE") rMultiple=0;
-else {
-const manual=$("manualR").value;
-if(manual.trim()===""){
-toast("Geli R multiple-ka.");
-return;
-}
-rMultiple=Number(manual);
-if(!Number.isFinite(rMultiple)){
-toast("R multiple sax ah geli.");
-return;
-}
-}
-
-const trades=sortedTrades();
-const t={
-id:uuid(),
-date,
-stage,
-account,
-pair:$("pair").value.trim().toUpperCase(),
-setup:$("setup").value.trim(),
-outcome,
-rMultiple,
-profitLoss:riskAmount*rMultiple,
-rules:$("rules").value,
-psychology:Number($("psychology").value),
-lesson:$("lesson").value.trim(),
-riskAmount,
-riskPercent:(rate*100).toFixed(1),
-cycle:cycleNum(trades.filter(x=>
-Number(x.account)===account && x.stage===stage
-).length),
-createdAt:Date.now()
-};
-
-if(!t.pair){
-toast("Instrument-ka geli.");
-return;
-}
-
-data.trades.push(t);
-data.settings.activeAccount=account;
-data.settings.activeStage=stage;
-saveLocal();
-render();
-closeTradeForm();
-e.target.reset();
-$("pair").value="GBPUSD";
-$("psychology").value="7";
-if($("manualR")) $("manualR").value="0";
-updateRiskPreview();
-
-try{
-await cloudUpsert("legend_trades",[makeSupabaseRecord(t)]);
-toast("Trade saved"+(syncMode&&currentUser?" & synced.":" locally."));
-}catch(err){
-toast("Saved locally; cloud sync failed: "+err.message);
-}
-});
-,stage=$("tradeStage").value,account=Number($("tradeAccount").value);const dayCount=data.trades.filter(t=>t.date===date).length;if(dayCount>=2){toast("Daily limit reached: ugu badnaan 2 trades maalintii.");return}const trades=sortedTrades(),rate=riskRate(stage),t={id:uuid(),date,stage,account,pair:$("pair").value.trim().toUpperCase(),setup:$("setup").value.trim(),outcome:$("outcome").value,rules:$("rules").value,psychology:Number($("psychology").value),lesson:$("lesson").value.trim(),riskAmount:account*rate,riskPercent:(rate*100).toFixed(1),cycle:cycleNum(trades.length),createdAt:Date.now()};if(!t.pair){toast("Instrument-ka geli.");return}data.trades.push(t);data.settings.activeAccount=account;data.settings.activeStage=stage;saveLocal();render();closeTradeForm();e.target.reset();$("pair").value="XAUUSD";$("psychology").value="7";try{await cloudUpsert("legend_trades",[makeSupabaseRecord(t)]);toast("Trade saved"+(syncMode&&currentUser?" & synced.":" locally."))}catch(err){toast("Saved locally; cloud sync failed: "+err.message)}});
-document.body.addEventListener("click",async e=>{const td=e.target.closest("[data-delete-trade]");if(td&&confirm("Ma tirtiraysaa trade-kan?")){const id=td.dataset.deleteTrade;data.trades=data.trades.filter(t=>t.id!==id);saveLocal();render();try{await cloudDelete("legend_trades",id)}catch(err){toast("Deleted locally; cloud sync failed.")}return}const pd=e.target.closest("[data-delete-payout]");if(pd&&confirm("Ma tirtiraysaa payout-kan?")){const id=pd.dataset.deletePayout;data.payouts=data.payouts.filter(p=>p.id!==id);saveLocal();render();try{await cloudDelete("legend_payouts",id)}catch(err){toast("Deleted locally; cloud sync failed.")}}});
-document.querySelectorAll("[data-account-stage]").forEach(s=>s.addEventListener("change",async()=>{const size=Number(s.dataset.accountStage);data.stages[String(size)]=s.value;saveLocal();if(size===6000){data.settings.activeAccount=6000;data.settings.activeStage=s.value==="planned"?"challenge":s.value}render();try{await cloudUpsert("legend_account_stages",[{id:`stage-${size}`,account_size:size,stage:s.value}])}catch(err){toast("Stage saved locally; cloud sync failed.")}}));
-$("payoutDate").value=dateNow();$("payoutForm").addEventListener("submit",async e=>{e.preventDefault();const p={id:uuid(),date:$("payoutDate").value,amount:Number($("payoutAmount").value),account:Number($("payoutAccount").value)};if(!(p.amount>0)){toast("Amount sax ah geli.");return}data.payouts.push(p);saveLocal();render();$("payoutAmount").value="";try{await cloudUpsert("legend_payouts",[{id:p.id,date:p.date,amount:p.amount,account_size:p.account}]);toast("Payout saved"+(syncMode&&currentUser?" & synced.":" locally."))}catch(err){toast("Payout saved locally; cloud sync failed.")}});
-$("settingsBtn").addEventListener("click",()=>{const cfg=JSON.parse(localStorage.getItem(CONFIG_KEY)||"null");$("supabaseUrl").value=cfg?.url||"";$("supabaseKey").value=cfg?.key||"";$("settingsDialog").showModal()});$("saveCloudConfig").addEventListener("click",saveConfig);$("signUpBtn").addEventListener("click",()=>auth(true));$("signInBtn").addEventListener("click",()=>auth(false));$("signOutBtn").addEventListener("click",async()=>{if(supabase)await supabase.auth.signOut();currentUser=null;setConnectionBadge();toast("Signed out. This device's local copy remains.");});
-render();await setupCloud();if("serviceWorker" in navigator && location.protocol.startsWith("http"))navigator.serviceWorker.register("./service-worker.js").catch(console.warn);
-}
-main();
+'use strict';
+const KEY='legend-tracker-data-v1', CLOUD='legend-tracker-supabase-config-v1';
+const $=id=>document.getElementById(id); const money=n=>new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format(Number(n)||0); const today=()=>new Date().toISOString().slice(0,10); const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,8);
+function blank(){return {accounts:[],trades:[],payouts:[],goal:10000}}
+function load(){try{let d=JSON.parse(localStorage.getItem(KEY)||'null');if(!d||typeof d!=='object')return blank();return { ...blank(),...d,accounts:Array.isArray(d.accounts)?d.accounts:[],trades:Array.isArray(d.trades)?d.trades:[],payouts:Array.isArray(d.payouts)?d.payouts:[]}}catch{return blank()}}
+let data=load(); function save(){localStorage.setItem(KEY,JSON.stringify(data));render()}
+function startingBalance(a){return Number(a?.startingBalance??a?.balance??0)}
+function riskRate(stage){return stage==='Challenge'?0.01:stage==='Funded'?0.005:0.01}
+function tradeR(t){if(t.outcome==='TP')return 3;if(t.outcome==='SL')return -1;if(t.outcome==='BE')return 0;return Number(t.rMultiple)||0}
+function tradePL(t){if(Number.isFinite(Number(t.profitLoss))&&t.profitLoss!==undefined)return Number(t.profitLoss);return startingBalance(data.accounts.find(a=>a.id===t.accountId))*Number(t.riskPercent||0)/100*tradeR(t)}
+function accountTrades(id){return data.trades.filter(t=>t.accountId===id)}
+function populateAccountSelects(){['tradeAccount','payoutAccount'].forEach(id=>{const el=$(id),old=el.value;el.innerHTML='';data.accounts.forEach(a=>{const o=document.createElement('option');o.value=a.id;o.textContent=`${a.name} (${money(a.balance)})`;el.appendChild(o)});if(old)el.value=old})}
+function render(){populateAccountSelects();const payouts=data.payouts.reduce((s,p)=>s+Number(p.amount||0),0);$('goalAmount').textContent=money(data.goal);$('goalProgress').textContent=`${money(payouts)} la helay · ${Math.round(payouts/Math.max(1,data.goal)*100)}%`; $('goalBar').style.width=Math.min(100,payouts/Math.max(1,data.goal)*100)+'%';const net=data.trades.reduce((s,t)=>s+tradePL(t),0);$('netPL').textContent=money(net);$('netPL').style.color=net>=0?'var(--accent)':'var(--red)';const decided=data.trades.filter(t=>t.outcome==='TP'||t.outcome==='SL');$('winRate').textContent=(decided.length?Math.round(decided.filter(t=>t.outcome==='TP').length/decided.length*100):0)+'%';$('tradeCount').textContent=data.trades.length;$('cycleCount').textContent=Math.ceil(data.trades.length/8);$('accountSummary').innerHTML=data.accounts.length?data.accounts.map(a=>`<div class="account-card"><div><b>${esc(a.name)}</b><p>${esc(a.type)} · ${esc(a.stage)} · ${accountTrades(a.id).length} trades</p></div><div><b>${money(startingBalance(a)+accountTrades(a.id).reduce((s,t)=>s+tradePL(t),0))}</b><p class="muted">Bilow: ${money(startingBalance(a))}</p></div></div>`).join(''):'<div class="empty">Account wali ma jiro.</div>';$('accountsList').innerHTML=data.accounts.length?data.accounts.map(a=>`<div class="account-card"><div><b>${esc(a.name)}</b><p>${esc(a.type)} · ${esc(a.stage)} · Balance ${money(a.balance)}</p><p class="muted">Risk Challenge 1% / Funded 0.5% · trades ${accountTrades(a.id).length}</p></div><button class="secondary" data-stage="${a.id}">Beddel stage</button><button class="secondary" data-delete-account="${a.id}">Tirtir</button></div>`).join(''):'<p class="muted">Ku dar account-kaaga kore.</p>';$('tradeRows').innerHTML=[...data.trades].reverse().map(t=>`<tr><td>${esc(t.date)}</td><td>${Math.floor((t.tradeNo-1)/8)+1} / ${t.tradeNo}</td><td>${esc(data.accounts.find(a=>a.id===t.accountId)?.name||'Deleted')}</td><td>${esc(t.pair)}</td><td>${esc(t.outcome)}</td><td>${tradeR(t).toFixed(1)}R</td><td>${money(tradePL(t))}</td><td>${t.rules==='yes'?'Haa':'Maya'}</td><td><button class="secondary" data-delete-trade="${t.id}">×</button></td></tr>`).join('');$('outcomeStats').textContent=`TP: ${data.trades.filter(t=>t.outcome==='TP').length} · SL: ${data.trades.filter(t=>t.outcome==='SL').length} · BE: ${data.trades.filter(t=>t.outcome==='BE').length} · Total R: ${data.trades.reduce((s,t)=>s+tradeR(t),0).toFixed(1)}R`;$('payoutList').innerHTML=data.payouts.slice().reverse().map(p=>`<div class="account-card"><span>${esc(p.date)} · ${esc(data.accounts.find(a=>a.id===p.accountId)?.name||'Account')}</span><b>${money(p.amount)}</b></div>`).join('')||'<p class="muted">Payout weli lama diiwaangelin.</p>';drawChart();drawCalendar()}
+function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function drawChart(){const c=$('equityChart'),ctx=c.getContext('2d'),w=c.clientWidth||500,h=200,dpr=window.devicePixelRatio||1;c.width=w*dpr;c.height=h*dpr;ctx.scale(dpr,dpr);ctx.clearRect(0,0,w,h);const vals=[0];data.trades.forEach(t=>vals.push(vals[vals.length-1]+tradePL(t)));if(vals.length<2){ctx.fillStyle='#a6b3c7';ctx.fillText('Marka trade la kaydiyo, equity curve ayaa muuqan doonta.',10,30);return}const min=Math.min(...vals,0),max=Math.max(...vals,1),range=max-min||1;ctx.strokeStyle='#58d6a2';ctx.lineWidth=2;ctx.beginPath();vals.forEach((v,i)=>{const x=10+i*(w-20)/(vals.length-1),y=h-15-(v-min)/range*(h-30);i?ctx.lineTo(x,y):ctx.moveTo(x,y)});ctx.stroke()}
+function drawCalendar(){const el=$('calendarGrid');if(!el)return;let month=$('calendarMonth').value||today().slice(0,7);$('calendarMonth').value=month;const [y,m]=month.split('-').map(Number),first=new Date(y,m-1,1).getDay(),days=new Date(y,m,0).getDate();const names=['Axad','Isniin','Talaado','Arbaco','Khamiis','Jimce','Sabti'];el.innerHTML=names.map(n=>`<div class="muted">${n.slice(0,3)}</div>`).join('');for(let i=0;i<first;i++)el.innerHTML+='<div></div>';for(let d=1;d<=days;d++){const date=`${month}-${String(d).padStart(2,'0')}`,ts=data.trades.filter(t=>t.date===date);el.innerHTML+=`<div class="calendar-day ${ts.length?'has-trade':''}">${d}${ts.length?`<small>${ts.length} trade · ${money(ts.reduce((s,t)=>s+tradePL(t),0))}</small>`:''}</div>`}}
+function preview(){const a=data.accounts.find(a=>a.id===$('tradeAccount').value),stage=$('tradeStage').value,risk=startingBalance(a)*riskRate(stage);$('riskPreview').textContent=`Risk: ${money(risk)} (${(riskRate(stage)*100).toFixed(1)}% ee starting balance) · TP ${money(risk*3)} · SL ${money(-risk)}`;$('manualRWrap').classList.toggle('hidden',$('outcome').value!=='MANUAL')}
+$('tradeDate').value=today();$('payoutDate').value=today();$('calendarMonth').value=today().slice(0,7);
+['tradeAccount','tradeStage','outcome'].forEach(id=>$(id).addEventListener('change',preview));$('manualR').addEventListener('input',preview);
+document.querySelectorAll('.tab').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('active',x===b));document.querySelectorAll('.page').forEach(p=>p.classList.toggle('active',p.id===b.dataset.tab));if(b.dataset.tab==='journal')preview()}));
+$('accountForm').addEventListener('submit',e=>{e.preventDefault();const balance=Number($('accountBalance').value);if(!(balance>0))return;data.accounts.push({id:uid(),name:$('accountName').value.trim(),type:$('accountType').value,balance,startingBalance:balance,stage:$('accountInitialStage').value,createdAt:today()});e.target.reset();save();preview()});
+$('tradeForm').addEventListener('submit',async e=>{e.preventDefault();const a=data.accounts.find(a=>a.id===$('tradeAccount').value);if(!a){$('formMessage').textContent='Marka hore ku dar account.';return}const date=$('tradeDate').value,stage=$('tradeStage').value;if(data.trades.filter(t=>t.accountId===a.id&&t.stage===stage&&t.date===date).length>=2){$('formMessage').textContent='Xadka waa 2 trades maalintii account/stage-kan.';return}let screenshot='';const file=$('screenshot').files[0];if(file){if(file.size>800000){$('formMessage').textContent='Screenshot-ku ha ka yaraado 800 KB si uusan kaydka u buuxin.';return} screenshot=await new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(r.result);r.onerror=reject;r.readAsDataURL(file)})}const riskPercent=riskRate(stage)*100;const t={id:uid(),date,accountId:a.id,stage,pair:$('pair').value,setup:$('setup').value,outcome:$('outcome').value,rMultiple:$('outcome').value==='MANUAL'?Number($('manualR').value):undefined,riskPercent,riskAmount:startingBalance(a)*riskRate(stage),rules:$('rules').value,psychology:Number($('psychology').value),lesson:$('lesson').value,screenshot,createdAt:new Date().toISOString()};t.tradeNo=accountTrades(a.id).length+1;t.profitLoss=t.riskAmount*tradeR(t);data.trades.push(t);save();e.target.reset();$('tradeDate').value=today();$('psychology').value='7';$('formMessage').textContent=`Trade #${t.tradeNo} waa la kaydiyey · ${money(t.profitLoss)} (${tradeR(t)}R).`;preview()});
+$('payoutForm').addEventListener('submit',e=>{e.preventDefault();if(!data.accounts.some(a=>a.id===$('payoutAccount').value)){alert('Marka hore ku dar account.');return}data.payouts.push({id:uid(),accountId:$('payoutAccount').value,amount:Number($('payoutAmount').value),date:$('payoutDate').value});save();e.target.reset();$('payoutDate').value=today()});$('goalBtn').addEventListener('click',()=>{const v=prompt('Geli payout goal-ka cusub ($):',String(data.goal));if(v!==null&&Number(v)>0){data.goal=Number(v);save()}});$('calendarMonth').addEventListener('change',drawCalendar);$('clearFilter').addEventListener('click',()=>render());
+document.addEventListener('click',e=>{const dt=e.target.closest('[data-delete-trade]');if(dt&&confirm('Ma tirtiraysaa trade-kan?')){data.trades=data.trades.filter(t=>t.id!==dt.dataset.deleteTrade);save()}const da=e.target.closest('[data-delete-account]');if(da&&confirm('Account-kan ma tirtiraysaa? Trades-kii hore way sii jiri doonaan.')){data.accounts=data.accounts.filter(a=>a.id!==da.dataset.deleteAccount);save()}const st=e.target.closest('[data-stage]');if(st){const a=data.accounts.find(a=>a.id===st.dataset.stage);if(a){const next=prompt('Geli stage cusub: Challenge, Funded, Real, Planned, Passed',a.stage);if(['Challenge','Funded','Real','Planned','Passed'].includes(next)){a.stage=next;save()}}}});
+$('exportBtn').addEventListener('click',()=>{const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`legend-backup-${today()}.json`;a.click();URL.revokeObjectURL(url)});$('saveCloud').addEventListener('click',()=>{localStorage.setItem(CLOUD,JSON.stringify({url:$('supabaseUrl').value.trim(),key:$('supabaseKey').value.trim()}));$('cloudMessage').textContent='Settings waa la kaydiyey, laakiin cloud sync dhab ah wali lama hawlgelin.'});try{const c=JSON.parse(localStorage.getItem(CLOUD)||'{}');$('supabaseUrl').value=c.url||'';$('supabaseKey').value=c.key||''}catch{}render();preview();
 })();
